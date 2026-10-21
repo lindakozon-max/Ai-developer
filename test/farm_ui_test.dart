@@ -29,18 +29,12 @@ void main() {
     await tester.tapAt(
       Offset(gameRect.center.dx, gameRect.top + gameRect.height * .35),
     );
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining('Feed ('), findsOneWidget);
-    tester
-        .widget<FilledButton>(
-          find.ancestor(
-            of: find.textContaining('Feed ('),
-            matching: find.byType(FilledButton),
-          ),
-        )
-        .onPressed!
-        .call();
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.textContaining('Feed ('));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining('Feed ('), findsNothing);
   });
 }

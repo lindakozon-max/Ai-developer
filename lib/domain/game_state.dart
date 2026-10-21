@@ -8,22 +8,27 @@ class GameState {
     required this.inventory,
     this.horses = const {},
     this.coins = 100,
+    this.riddenHorseId,
   });
   final Map<String, Animal> animals;
   final Inventory inventory;
   final Map<String, Horse> horses;
   final int coins;
+  final String? riddenHorseId;
   GameState copyWith({
     Map<String, Animal>? animals,
     Inventory? inventory,
     Map<String, Horse>? horses,
     int? coins,
+    String? riddenHorseId,
+    bool dismount = false,
   }) => GameState(
-        animals: animals ?? this.animals,
-        inventory: inventory ?? this.inventory,
-        horses: horses ?? this.horses,
-        coins: coins ?? this.coins,
-      );
+    animals: animals ?? this.animals,
+    inventory: inventory ?? this.inventory,
+    horses: horses ?? this.horses,
+    coins: coins ?? this.coins,
+    riddenHorseId: dismount ? null : riddenHorseId ?? this.riddenHorseId,
+  );
 }
 
 GameState petHorse(GameState state, String horseId) {
@@ -32,25 +37,96 @@ GameState petHorse(GameState state, String horseId) {
 }
 
 GameState buyHorse(GameState state, Horse horse, {int price = 50}) {
-  if (state.coins < price || state.horses.containsKey(horse.id)) return state;
+  if (price < 0 || state.coins < price || state.horses.containsKey(horse.id)) {
+    return state;
+  }
   return state.copyWith(
     horses: {...state.horses, horse.id: horse},
     coins: state.coins - price,
   );
 }
 
-GameState buySaddle(GameState state, String horseId, {int price = 30}) {
+GameState buySaddle(
+  GameState state,
+  String horseId, {
+  SaddleType saddle = SaddleType.classic,
+}) {
   final horse = state.horses[horseId];
-  if (horse == null || horse.hasSaddle || state.coins < price) return state;
+  if (horse == null ||
+      horse.ownedSaddles.contains(saddle) ||
+      state.coins < saddle.price) {
+    return state;
+  }
   return state.copyWith(
-    horses: {...state.horses, horseId: horse.copyWith(hasSaddle: true)},
-    coins: state.coins - price,
+    horses: {
+      ...state.horses,
+      horseId: horse.copyWith(
+        saddle: saddle,
+        ownedSaddles: {...horse.ownedSaddles, saddle},
+      ),
+    },
+    coins: state.coins - saddle.price,
   );
 }
 
-GameState buyDecoration(GameState state, String horseId, String decoration, {int price = 20}) {
+GameState equipSaddle(GameState state, String horseId, SaddleType saddle) {
   final horse = state.horses[horseId];
-  if (horse == null || horse.decorations.contains(decoration) || state.coins < price) return state;
+  if (horse == null || !horse.ownedSaddles.contains(saddle)) return state;
+  return state.copyWith(
+    horses: {
+      ...state.horses,
+      horseId: horse.copyWith(saddle: saddle),
+    },
+  );
+}
+
+GameState mountHorse(GameState state, String horseId) {
+  final horse = state.horses[horseId];
+  if (horse == null || !horse.hasSaddle || state.riddenHorseId != null) {
+    return state;
+  }
+  return state.copyWith(riddenHorseId: horseId);
+}
+
+GameState dismountHorse(GameState state) => state.copyWith(dismount: true);
+
+GameState buyAnimal(GameState state, Animal animal) {
+  if (state.coins < animal.kind.price || state.animals.containsKey(animal.id)) {
+    return state;
+  }
+  return state.copyWith(
+    animals: {...state.animals, animal.id: animal},
+    coins: state.coins - animal.kind.price,
+  );
+}
+
+GameState petAnimal(GameState state, String animalId) {
+  final animal = state.animals[animalId];
+  if (animal == null) return state;
+  return state.copyWith(
+    coins: state.coins + 10,
+    animals: {
+      ...state.animals,
+      animalId: animal.copyWith(
+        needs: animal.needs.copyWith(happiness: animal.needs.happiness + 5),
+      ),
+    },
+  );
+}
+
+GameState buyDecoration(
+  GameState state,
+  String horseId,
+  String decoration, {
+  int price = 20,
+}) {
+  final horse = state.horses[horseId];
+  if (price < 0 ||
+      horse == null ||
+      horse.decorations.contains(decoration) ||
+      state.coins < price) {
+    return state;
+  }
   return state.copyWith(
     horses: {
       ...state.horses,
@@ -62,15 +138,45 @@ GameState buyDecoration(GameState state, String horseId, String decoration, {int
 
 GameState feedAnimal(GameState state, String animalId) {
   final animal = state.animals[animalId];
-  if (animal == null || state.inventory.food == 0) return state;
+  if (animal == null || state.inventory.food <= 0) return state;
   return state.copyWith(
     animals: {
       ...state.animals,
-      animalId: animal.copyWith(needs: animal.needs.copyWith(
-        hunger: animal.needs.hunger + 25,
-        happiness: animal.needs.happiness + 5,
-      )),
+      animalId: animal.copyWith(
+        needs: animal.needs.copyWith(
+          hunger: animal.needs.hunger + 25,
+          happiness: animal.needs.happiness + 5,
+        ),
+      ),
     },
     inventory: state.inventory.copyWith(food: state.inventory.food - 1),
   );
 }
+
+GameState initialFarmState() => GameState(
+  animals: {
+    'biscuit': const Animal(
+      id: 'biscuit',
+      name: 'Biscuit',
+      needs: AnimalNeeds(hunger: 45, happiness: 70),
+    ),
+    for (final kind in AnimalKind.values.where(
+      (kind) => kind != AnimalKind.sheep,
+    ))
+      '${kind.name}-1': Animal(
+        id: '${kind.name}-1',
+        name: '${kind.name[0].toUpperCase()}${kind.name.substring(1)}',
+        kind: kind,
+        variant: AnimalVariant.values[kind.index],
+        needs: const AnimalNeeds(hunger: 45, happiness: 70),
+      ),
+  },
+  inventory: const Inventory(food: 3),
+  horses: {
+    'horse-1': const Horse(
+      id: 'horse-1',
+      name: 'Chestnut',
+      variant: HorseVariant.chestnut,
+    ),
+  },
+);
