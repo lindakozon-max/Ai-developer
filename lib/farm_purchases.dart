@@ -17,6 +17,10 @@ class FarmPurchases extends Component with HasGameReference<FarmGame> {
     for (final item in game.ownedPurchases) {
       canvas.save();
       if (item == FarmItem.dragon) {
+        if (game.dragons.isNotEmpty) {
+          canvas.restore();
+          continue;
+        }
         canvas.translate(
           game.size.x * (.22 + sin(_time * .35) * .10),
           game.size.y * .105 + sin(_time * 2) * 4,

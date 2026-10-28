@@ -4,7 +4,18 @@ enum HorseBreed { farm, friesian }
 
 enum HorseStyle { natural, spotted, golden, midnight, rainbow, celestial }
 
-enum SaddleType { classic, western, racing, royal, trail }
+enum SaddleType {
+  classic,
+  western,
+  racing,
+  royal,
+  trail,
+  dressage,
+  endurance,
+  jousting,
+  sky,
+  ember,
+}
 
 extension SaddleDetails on SaddleType {
   int get price => switch (this) {
@@ -13,6 +24,11 @@ extension SaddleDetails on SaddleType {
     SaddleType.racing => 55,
     SaddleType.royal => 75,
     SaddleType.trail => 40,
+    SaddleType.dressage => 60,
+    SaddleType.endurance => 65,
+    SaddleType.jousting => 90,
+    SaddleType.sky => 85,
+    SaddleType.ember => 95,
   };
 }
 

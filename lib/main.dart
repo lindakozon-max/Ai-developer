@@ -3,12 +3,15 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'domain/animal.dart';
+import 'domain/dragon.dart';
 import 'domain/game_state.dart';
 import 'domain/horse.dart';
 import 'domain/farm_item.dart';
 import 'domain/inventory.dart';
 import 'services/weather_service.dart';
 import 'farm_game.dart';
+
+part 'dragon_panels.dart';
 
 void main() => runApp(const FarmApp());
 String _title(String value) =>
@@ -113,8 +116,10 @@ class _FarmScreenState extends State<FarmScreen> {
     game = FarmGame(
       onAnimalTapped: _showAnimal,
       onHorseTapped: _showHorse,
+      onDragonTapped: (dragon) => showDragonPanel(dragon),
       initialAnimals: state.animals.values.toList(),
       initialHorses: state.horses.values.toList(),
+      initialDragons: state.dragons.values.toList(),
     );
     _refreshWeather();
     _weatherTimer = Timer.periodic(
@@ -137,9 +142,125 @@ class _FarmScreenState extends State<FarmScreen> {
       game.addHorse(horse);
       game.syncHorse(horse);
     }
+    for (final dragon in state.dragons.values) {
+      game.addDragon(dragon);
+      game.syncDragon(dragon);
+    }
     game.ownedPurchases = state.ownedPurchases;
     game.setRiddenHorse(state.riddenHorseId);
+    game.setRiddenDragon(state.riddenDragonId);
+    for (final animal in game.animals.toList()) {
+      if (!state.animals.containsKey(animal.id)) game.removeAnimal(animal.id);
+    }
+    for (final horse in game.horses.toList()) {
+      if (!state.horses.containsKey(horse.id)) game.removeHorse(horse.id);
+    }
+    for (final dragon in game.dragons.toList()) {
+      if (!state.dragons.containsKey(dragon.id)) game.removeDragon(dragon.id);
+    }
     refresh(() {});
+  }
+
+  Future<void> _confirmRemoval(
+    BuildContext panelContext,
+    String name,
+    VoidCallback remove,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: panelContext,
+      builder: (context) => AlertDialog(
+        title: Text('Remove $name?'),
+        content: const Text(
+          'This creature will leave your farm. Coins and equipment are not refunded.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep animal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted && panelContext.mounted) remove();
+  }
+
+  Future<void> _showCreatures() async {
+    String? selected;
+    var kind = '';
+    await _showPanel(
+      (context, refresh) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Your animals',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          for (final animal in state.animals.values)
+            ListTile(
+              title: Text(animal.name),
+              subtitle: Text(animal.kind.name),
+              onTap: () {
+                selected = animal.id;
+                kind = 'animal';
+                Navigator.pop(context);
+              },
+            ),
+          for (final horse in state.horses.values)
+            ListTile(
+              title: Text(horse.name),
+              subtitle: Text('${horse.breed.name} horse'),
+              onTap: () {
+                selected = horse.id;
+                kind = 'horse';
+                Navigator.pop(context);
+              },
+            ),
+          for (final dragon in state.dragons.values)
+            ListTile(
+              title: Text(dragon.name),
+              subtitle: Text(
+                '${dragon.elements.map((e) => e.name).join(' + ')} dragon',
+              ),
+              onTap: () {
+                selected = dragon.id;
+                kind = 'dragon';
+                Navigator.pop(context);
+              },
+            ),
+          if (state.animals.isEmpty &&
+              state.horses.isEmpty &&
+              state.dragons.isEmpty)
+            const Text('Your farm is empty. Visit the market to add animals.'),
+        ],
+      ),
+    );
+    if (!mounted || selected == null) return;
+    if (kind == 'animal') {
+      for (final animal in game.animals) {
+        if (animal.id == selected) {
+          _showAnimal(animal);
+          return;
+        }
+      }
+    } else if (kind == 'horse') {
+      for (final horse in game.horses) {
+        if (horse.id == selected) {
+          _showHorse(horse);
+          return;
+        }
+      }
+    } else {
+      for (final dragon in game.dragons) {
+        if (dragon.id == selected) {
+          showDragonPanel(dragon);
+          return;
+        }
+      }
+    }
   }
 
   Future<void> _showPanel(
@@ -175,7 +296,8 @@ class _FarmScreenState extends State<FarmScreen> {
   void _showAnimal(AnimalComponent component) {
     var food = FoodType.pellets;
     _showPanel((context, refresh) {
-      final animal = state.animals[component.id]!;
+      final animal = state.animals[component.id];
+      if (animal == null) return const SizedBox.shrink();
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -233,6 +355,14 @@ class _FarmScreenState extends State<FarmScreen> {
                 ),
             ],
           ),
+          TextButton.icon(
+            onPressed: () => _confirmRemoval(context, animal.name, () {
+              _change(removeAnimal(state, animal.id), refresh);
+              Navigator.pop(context);
+            }),
+            icon: const Icon(Icons.pets),
+            label: const Text('Remove animal'),
+          ),
         ],
       );
     });
@@ -242,7 +372,8 @@ class _FarmScreenState extends State<FarmScreen> {
     String? partnerId;
     String? breedingMessage;
     _showPanel((context, refresh) {
-      final horse = state.horses[component.id]!;
+      final horse = state.horses[component.id];
+      if (horse == null) return const SizedBox.shrink();
       final riding = state.riddenHorseId == horse.id;
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -263,7 +394,10 @@ class _FarmScreenState extends State<FarmScreen> {
           ),
           FilledButton.icon(
             onPressed:
-                !horse.hasSaddle || (!riding && state.riddenHorseId != null)
+                !horse.hasSaddle ||
+                    (!riding &&
+                        (state.riddenHorseId != null ||
+                            state.riddenDragonId != null))
                 ? null
                 : () {
                     _change(
@@ -402,6 +536,14 @@ class _FarmScreenState extends State<FarmScreen> {
             Text(
               'Parents: ${horse.parentIds.map((id) => state.horses[id]?.name ?? id).join(' & ')}',
             ),
+          TextButton.icon(
+            onPressed: () => _confirmRemoval(context, horse.name, () {
+              _change(removeHorse(state, horse.id), refresh);
+              Navigator.pop(context);
+            }),
+            icon: const Icon(Icons.pets),
+            label: const Text('Remove horse'),
+          ),
         ],
       );
     });
@@ -496,9 +638,9 @@ class _FarmScreenState extends State<FarmScreen> {
                 : () {
                     if (animalKind == null) {
                       final horse = Horse(
-                        id: 'horse-${state.horses.length + 1}',
+                        id: nextHorseId(state),
                         name:
-                            '${_title(variants[variantIndex])} horse ${state.horses.length + 1}',
+                            '${_title(variants[variantIndex])} horse ${nextHorseId(state).split('-').last}',
                         variant: HorseVariant.values[variantIndex],
                         breed: breed,
                       );
@@ -508,9 +650,9 @@ class _FarmScreenState extends State<FarmScreen> {
                       _change(next, refresh);
                     } else {
                       final animal = Animal(
-                        id: 'animal-${state.animals.length + 1}',
+                        id: nextAnimalId(state),
                         name:
-                            '${_title(variants[variantIndex])} $kind ${state.animals.length + 1}',
+                            '${_title(variants[variantIndex])} $kind ${nextAnimalId(state).split('-').last}',
                         kind: animalKind,
                         variant: AnimalVariant.values[variantIndex],
                         needs: const AnimalNeeds(hunger: 45, happiness: 70),
@@ -526,7 +668,7 @@ class _FarmScreenState extends State<FarmScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '${state.animals.length + state.horses.length} animals on your farm',
+            '${state.animals.length + state.horses.length + state.dragons.length} animals on your farm',
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
@@ -562,14 +704,17 @@ class _FarmScreenState extends State<FarmScreen> {
                 '${_title(item.name)} • ${state.ownedPurchases.contains(item) ? 'Owned' : '${item.price} coins'}',
               ),
             ),
+          const SizedBox(height: 16),
+          dragonMarket(refresh),
         ],
       );
     });
   }
 
   void _dismount() {
-    setState(() => state = dismountHorse(state));
+    setState(() => state = dismountDragon(dismountHorse(state)));
     game.setRiddenHorse(null);
+    game.setRiddenDragon(null);
     game.clearMovement();
     _gameFocus.requestFocus();
   }
@@ -645,7 +790,8 @@ class _FarmScreenState extends State<FarmScreen> {
                         icon: const Icon(Icons.storefront),
                         label: const Text('Farm market'),
                       ),
-                      if (state.riddenHorseId != null)
+                      if (state.riddenHorseId != null ||
+                          state.riddenDragonId != null)
                         FilledButton.icon(
                           onPressed: _dismount,
                           icon: const Icon(Icons.stop),
@@ -697,14 +843,24 @@ class _FarmScreenState extends State<FarmScreen> {
         ),
         SafeArea(
           top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-            child: Text(
-              state.riddenHorseId == null
-                  ? 'Tap animals to care for them • Fit a saddle to ride\nMove with WASD, arrows, or hold the buttons'
-                  : 'Riding • Move with WASD, arrows, or hold the buttons',
-              textAlign: TextAlign.center,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton.icon(
+                onPressed: _showCreatures,
+                icon: const Icon(Icons.pets),
+                label: const Text('Your animals'),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                child: Text(
+                  state.riddenHorseId == null && state.riddenDragonId == null
+                      ? 'Tap animals to care for them • Fit a saddle to ride\nMove with WASD, arrows, or hold the buttons'
+                      : 'Riding • Move with WASD, arrows, or hold the buttons',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
           ),
         ),
       ],

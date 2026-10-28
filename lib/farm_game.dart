@@ -7,41 +7,51 @@ import 'package:flutter/services.dart';
 import 'package:flutter/painting.dart';
 
 import 'domain/animal.dart';
+import 'domain/dragon.dart';
 import 'domain/horse.dart';
 import 'domain/farm_item.dart';
 import 'domain/weather.dart';
 
 part 'farm_scenery.dart';
 part 'farm_purchases.dart';
+part 'dragon_component.dart';
 
 class FarmGame extends FlameGame {
   FarmGame({
     required this.onAnimalTapped,
     required this.onHorseTapped,
+    this.onDragonTapped,
     this.initialAnimals = const [],
     this.initialHorses = const [],
+    this.initialDragons = const [],
   });
 
   final void Function(AnimalComponent animal) onAnimalTapped;
   final void Function(HorseComponent horse) onHorseTapped;
+  final void Function(DragonComponent dragon)? onDragonTapped;
   final List<Animal> initialAnimals;
   final List<Horse> initialHorses;
+  final List<Dragon> initialDragons;
   PlayerComponent? player;
   final List<AnimalComponent> animals = [];
   final List<HorseComponent> horses = [];
+  final List<DragonComponent> dragons = [];
   final Set<LogicalKeyboardKey> _heldKeys = {};
   final Vector2 _touchDirection = Vector2.zero();
   String? _riddenHorseId;
+  String? _riddenDragonId;
   WeatherSnapshot? weather;
   Set<FarmItem> ownedPurchases = {};
 
   // One pen per kind; horses use the sixth pen until mounted.
-  Rect enclosure(int index) => Rect.fromLTWH(
-    size.x * (.04 + (index % 2) * .49),
-    size.y * (.20 + (index ~/ 2) * .25),
-    size.x * .43,
-    size.y * .22,
-  );
+  Rect enclosure(int index) => index == 6
+      ? Rect.fromLTWH(size.x * .03, size.y * .01, size.x * .46, size.y * .17)
+      : Rect.fromLTWH(
+          size.x * (.04 + (index % 2) * .49),
+          size.y * (.20 + (index ~/ 2) * .25),
+          size.x * .43,
+          size.y * .22,
+        );
 
   Vector2 confinedPosition(Vector2 point, int pen, Vector2 body) {
     final rect = enclosure(pen);
@@ -89,6 +99,9 @@ class FarmGame extends FlameGame {
     for (final horse in startingHorses) {
       addHorse(horse);
     }
+    for (final dragon in initialDragons) {
+      addDragon(dragon);
+    }
   }
 
   @override
@@ -113,7 +126,13 @@ class FarmGame extends FlameGame {
     }
     if (delta.length2 > 0) {
       movePlayer(
-        delta.normalized() * (_riddenHorseId == null ? 180 : 290) * dt,
+        delta.normalized() *
+            (_riddenDragonId != null
+                ? 340
+                : _riddenHorseId == null
+                ? 180
+                : 290) *
+            dt,
       );
     }
   }
@@ -146,8 +165,15 @@ class FarmGame extends FlameGame {
             : confinedPosition(horse.position, 5, horse.size),
       );
     }
+    for (final dragon in dragons) {
+      dragon.position.setFrom(
+        dragon.isRidden
+            ? boundedPosition(dragon.position, 52)
+            : confinedPosition(dragon.position, 6, dragon.size),
+      );
+    }
     if (player != null) {
-      final mount = _riddenHorse;
+      final mount = _riddenHorse ?? _riddenDragon;
       player!.position.setFrom(
         mount?.position ?? boundedPosition(player!.position, 24),
       );
@@ -161,10 +187,17 @@ class FarmGame extends FlameGame {
     return null;
   }
 
+  DragonComponent? get _riddenDragon {
+    for (final dragon in dragons) {
+      if (dragon.id == _riddenDragonId) return dragon;
+    }
+    return null;
+  }
+
   void movePlayer(Vector2 delta) {
     final currentPlayer = player;
     if (currentPlayer == null) return;
-    final mount = _riddenHorse;
+    final mount = _riddenHorse ?? _riddenDragon;
     if (mount != null) {
       mount.position.setFrom(boundedPosition(mount.position + delta, 52));
       mount.animateMovement(delta);
@@ -200,6 +233,7 @@ class FarmGame extends FlameGame {
 
   void setRiddenHorse(String? id) {
     if (_riddenHorseId == id) return;
+    if (id != null && _riddenDragonId != null) return;
     HorseComponent? next;
     if (id != null) {
       for (final horse in horses) {
@@ -218,12 +252,94 @@ class FarmGame extends FlameGame {
       );
     }
     _riddenHorseId = next?.id;
-    player?.isRiding = next != null;
+    player?.isRiding = next != null || _riddenDragonId != null;
     if (next != null) {
       next.isRidden = true;
       player?.position.setFrom(next.position);
     }
     clearMovement();
+  }
+
+  void setRiddenDragon(String? id) {
+    if (_riddenDragonId == id) return;
+    if (id != null && _riddenHorseId != null) return;
+    DragonComponent? next;
+    if (id != null) {
+      for (final dragon in dragons) {
+        if (dragon.id == id && dragon.hasSaddle) next = dragon;
+      }
+      if (next == null) return;
+    }
+    final previous = _riddenDragon;
+    if (previous != null) {
+      previous.isRidden = false;
+      previous.priority = 35;
+      previous.position.setFrom(
+        confinedPosition(previous.position, 6, previous.size),
+      );
+      player?.position.setFrom(
+        boundedPosition(previous.position + Vector2(0, 52), 24),
+      );
+    }
+    _riddenDragonId = next?.id;
+    player?.isRiding = next != null || _riddenHorseId != null;
+    if (next != null) {
+      next.isRidden = true;
+      next.priority = 90;
+      player?.position.setFrom(next.position);
+    }
+    clearMovement();
+  }
+
+  void addDragon(Dragon dragon) {
+    if (dragons.any((component) => component.id == dragon.id)) return;
+    final component = DragonComponent(
+      dragon: dragon,
+      onTap: (d) => onDragonTapped?.call(d),
+    )..priority = 35;
+    final roost = enclosure(6);
+    component.position.setFrom(
+      confinedPosition(
+        Vector2(roost.center.dx, roost.center.dy),
+        6,
+        component.size,
+      ),
+    );
+    dragons.add(component);
+    add(component);
+  }
+
+  void syncDragon(Dragon dragon) {
+    for (final component in dragons) {
+      if (component.id == dragon.id) {
+        component.dragon = dragon;
+        if (!dragon.hasSaddle && component.isRidden) setRiddenDragon(null);
+        return;
+      }
+    }
+  }
+
+  void removeAnimal(String id) {
+    for (final component in animals.where((a) => a.id == id).toList()) {
+      component.removeFromParent();
+      animals.remove(component);
+    }
+  }
+
+  void removeHorse(String id) {
+    if (_riddenHorseId == id) setRiddenHorse(null);
+    for (final component in horses.where((h) => h.id == id).toList()) {
+      component.removeFromParent();
+      horses.remove(component);
+    }
+  }
+
+  void removeDragon(String id) {
+    if (_riddenDragonId == id) setRiddenDragon(null);
+    for (final component in dragons.where((d) => d.id == id).toList()) {
+      component.removeFromParent();
+      dragons.remove(component);
+    }
   }
 
   Vector2 _spawnPosition(int index, {bool horse = false}) {
@@ -969,6 +1085,14 @@ class HorseComponent extends WanderingComponent with TapCallbacks {
       SaddleType.racing => (const Color(0xffe67272), const Color(0xff333c58)),
       SaddleType.royal => (const Color(0xff7950aa), const Color(0xffd3a54e)),
       SaddleType.trail => (const Color(0xff75a58a), const Color(0xff665340)),
+      SaddleType.dressage => (const Color(0xfff0eee5), const Color(0xff282a3d)),
+      SaddleType.endurance => (
+        const Color(0xff58a2a8),
+        const Color(0xff644e3e),
+      ),
+      SaddleType.jousting => (const Color(0xff9f4355), const Color(0xffbdab74)),
+      SaddleType.sky => (const Color(0xff89cdeb), const Color(0xff4f6394)),
+      SaddleType.ember => (const Color(0xffe38142), const Color(0xff692e35)),
     };
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -996,6 +1120,21 @@ class HorseComponent extends WanderingComponent with TapCallbacks {
         ..strokeWidth = 2,
     );
     switch (type) {
+      case SaddleType.dressage:
+      case SaddleType.endurance:
+      case SaddleType.jousting:
+      case SaddleType.sky:
+      case SaddleType.ember:
+        canvas.drawCircle(const Offset(50, 35), 4, Paint()..color = leather);
+        for (var i = 0; i <= type.index - 5; i++) {
+          _line(
+            canvas,
+            Offset(30.0 + i * 5, 39),
+            Offset(32.0 + i * 5, 43),
+            leather,
+            2,
+          );
+        }
       case SaddleType.classic:
         _line(
           canvas,

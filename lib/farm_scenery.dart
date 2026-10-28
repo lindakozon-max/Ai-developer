@@ -11,6 +11,22 @@ class EnclosureBackground extends Component with HasGameReference<FarmGame> {
     final fence = Paint()
       ..color = const Color(0xff936747)
       ..strokeWidth = 3;
+    if (game.dragons.isNotEmpty) {
+      final roost = game.enclosure(6);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(roost, const Radius.circular(14)),
+        Paint()..color = const Color(0xffd5c7e8),
+      );
+      TextPainter(
+          text: const TextSpan(
+            text: 'Dragon roost',
+            style: TextStyle(color: Color(0xff513e67), fontSize: 12),
+          ),
+          textDirection: TextDirection.ltr,
+        )
+        ..layout(maxWidth: roost.width)
+        ..paint(canvas, Offset(roost.left + 6, roost.top + 3));
+    }
     for (var index = 0; index < 6; index++) {
       final r = game.enclosure(index);
       canvas.drawRect(r, Paint()..color = const Color(0xffb9df9d));
