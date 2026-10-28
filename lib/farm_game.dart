@@ -8,9 +8,11 @@ import 'package:flutter/painting.dart';
 
 import 'domain/animal.dart';
 import 'domain/horse.dart';
+import 'domain/farm_item.dart';
 import 'domain/weather.dart';
 
 part 'farm_scenery.dart';
+part 'farm_purchases.dart';
 
 class FarmGame extends FlameGame {
   FarmGame({
@@ -31,6 +33,7 @@ class FarmGame extends FlameGame {
   final Vector2 _touchDirection = Vector2.zero();
   String? _riddenHorseId;
   WeatherSnapshot? weather;
+  Set<FarmItem> ownedPurchases = {};
 
   // One pen per kind; horses use the sixth pen until mounted.
   Rect enclosure(int index) => Rect.fromLTWH(
@@ -54,6 +57,7 @@ class FarmGame extends FlameGame {
   Future<void> onLoad() async {
     add(FarmBackground());
     add(EnclosureBackground()..priority = 1);
+    add(FarmPurchases()..priority = 40);
     add(WeatherOverlay()..priority = 200);
     player = PlayerComponent()
       ..position = boundedPosition(Vector2(size.x * .5, size.y * .62), 24)
@@ -786,15 +790,25 @@ class HorseComponent extends WanderingComponent with TapCallbacks {
   @override
   void render(Canvas canvas) {
     beginAnimal(canvas);
-    final color = switch (variant) {
+    final baseColor = switch (variant) {
       HorseVariant.chestnut => const Color(0xff9b573f),
       HorseVariant.palomino => const Color(0xffe7b957),
       HorseVariant.dapple => const Color(0xff8f8f9f),
       HorseVariant.black => const Color(0xff393642),
       HorseVariant.grey => const Color(0xffc8ccd1),
     };
-    final mane =
-        variant == HorseVariant.palomino || variant == HorseVariant.grey
+    final color = switch (horse.style) {
+      HorseStyle.golden => const Color(0xffe5b83c),
+      HorseStyle.midnight => const Color(0xff292851),
+      HorseStyle.celestial => const Color(0xff9188d5),
+      _ =>
+        horse.breed == HorseBreed.friesian
+            ? const Color(0xff24232d)
+            : baseColor,
+    };
+    final mane = horse.breed == HorseBreed.friesian
+        ? const Color(0xff14131c)
+        : variant == HorseVariant.palomino || variant == HorseVariant.grey
         ? const Color(0xfff5e5c5)
         : const Color(0xff513b3a);
     final body = Paint()..color = color;
@@ -823,6 +837,53 @@ class HorseComponent extends WanderingComponent with TapCallbacks {
       }
     }
     canvas.drawOval(const Rect.fromLTWH(14, 22, 58, 30), body);
+    if (horse.style == HorseStyle.rainbow) {
+      canvas.save();
+      canvas.clipPath(Path()..addOval(const Rect.fromLTWH(14, 22, 58, 30)));
+      const stripes = [
+        Color(0xffed7b92),
+        Color(0xfff7bd61),
+        Color(0xffeddc6d),
+        Color(0xff7ccda0),
+        Color(0xff7bb5e2),
+        Color(0xffb28bda),
+      ];
+      for (var i = 0; i < stripes.length; i++) {
+        canvas.drawRect(
+          Rect.fromLTWH(14 + i * 10, 22, 10, 30),
+          Paint()..color = stripes[i],
+        );
+      }
+      canvas.restore();
+    }
+    if (horse.breed == HorseBreed.friesian) {
+      for (final x in [21.0, 31.0, 53.0, 63.0]) {
+        canvas.drawOval(Rect.fromLTWH(x - 4, 58, 10, 9), Paint()..color = mane);
+      }
+      for (var i = 0; i < 5; i++) {
+        _line(
+          canvas,
+          Offset(58 + i * 2, 21 - i * 2),
+          Offset(51 + i * 2, 39.0 - i),
+          mane,
+          4,
+        );
+      }
+    }
+    if (horse.style == HorseStyle.spotted ||
+        horse.style == HorseStyle.celestial) {
+      for (var i = 0; i < 6; i++) {
+        final point = Offset(23 + (i % 3) * 16, 30 + (i ~/ 3) * 12);
+        canvas.drawCircle(
+          point,
+          horse.style == HorseStyle.spotted ? 4 : 2,
+          Paint()
+            ..color = horse.style == HorseStyle.spotted
+                ? const Color(0xfffbf1dd)
+                : const Color(0xffffe9a3),
+        );
+      }
+    }
     _line(canvas, const Offset(62, 36), const Offset(71, 18), color, 20);
     _line(canvas, const Offset(60, 30), const Offset(67, 13), mane, 7);
     canvas.drawCircle(const Offset(76, 22), 14, body);
