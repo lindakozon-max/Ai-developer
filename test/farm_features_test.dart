@@ -43,8 +43,8 @@ void main() {
     }
   }
 
-  test('five variants are available for every kind including horses', () {
-    expect(AnimalVariant.values.length, 5);
+  test('ten animal variants and five horse variants are available', () {
+    expect(AnimalVariant.values.length, 10);
     expect(HorseVariant.values.length, 5);
     for (final variant in HorseVariant.values) {
       final result = buyHorse(

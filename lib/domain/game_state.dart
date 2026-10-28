@@ -136,20 +136,54 @@ GameState buyDecoration(
   );
 }
 
-GameState feedAnimal(GameState state, String animalId) {
+GameState buyFood(GameState state, FoodType food, {int quantity = 1}) {
+  if (quantity <= 0 || state.coins < food.price * quantity) return state;
+  return state.copyWith(
+    coins: state.coins - food.price * quantity,
+    inventory: state.inventory.withCount(
+      food,
+      state.inventory.count(food) + quantity,
+    ),
+  );
+}
+
+GameState playWithAnimal(
+  GameState state,
+  String animalId, {
+  AnimalToy toy = AnimalToy.ball,
+}) {
   final animal = state.animals[animalId];
-  if (animal == null || state.inventory.food <= 0) return state;
+  if (animal == null) return state;
+  return state.copyWith(
+    animals: {
+      ...state.animals,
+      animalId: animal.copyWith(
+        needs: animal.needs.copyWith(happiness: animal.needs.happiness + 12),
+      ),
+    },
+  );
+}
+
+GameState feedAnimal(
+  GameState state,
+  String animalId, {
+  FoodType food = FoodType.pellets,
+}) {
+  final animal = state.animals[animalId];
+  if (animal == null || state.inventory.count(food) <= 0) return state;
   return state.copyWith(
     animals: {
       ...state.animals,
       animalId: animal.copyWith(
         needs: animal.needs.copyWith(
-          hunger: animal.needs.hunger + 25,
-          happiness: animal.needs.happiness + 5,
+          hunger: animal.needs.hunger + food.nutrition,
+          happiness:
+              animal.needs.happiness +
+              (animal.kind.favoriteFood == food ? 10 : 5),
         ),
       ),
     },
-    inventory: state.inventory.copyWith(food: state.inventory.food - 1),
+    inventory: state.inventory.withCount(food, state.inventory.count(food) - 1),
   );
 }
 

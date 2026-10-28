@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'domain/animal.dart';
 import 'domain/game_state.dart';
 import 'domain/horse.dart';
+import 'domain/inventory.dart';
+import 'services/weather_service.dart';
 import 'farm_game.dart';
 
 void main() => runApp(const FarmApp());
@@ -74,6 +77,29 @@ class _FarmScreenState extends State<FarmScreen> {
   late final FarmGame game;
   final FocusNode _gameFocus = FocusNode();
   bool _panelOpen = false;
+  final WeatherService _weatherService = WeatherService();
+  Timer? _weatherTimer;
+  String _weatherStatus = 'Bratislava–Rača • Loading weather…';
+
+  Future<void> _refreshWeather() async {
+    try {
+      final weather = await _weatherService.fetchCurrent();
+      if (!mounted) return;
+      setState(() {
+        game.weather = weather;
+        final time = weather.observedAt.toIso8601String().substring(11, 16);
+        _weatherStatus =
+            'Bratislava–Rača • ${weather.temperatureC.toStringAsFixed(1)}°C • ${weather.condition}\nOpen-Meteo • $time local';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => _weatherStatus = game.weather == null
+            ? 'Bratislava–Rača • Weather unavailable • Retry'
+            : 'Bratislava–Rača • Last weather is stale • Retry',
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -85,10 +111,17 @@ class _FarmScreenState extends State<FarmScreen> {
       initialAnimals: state.animals.values.toList(),
       initialHorses: state.horses.values.toList(),
     );
+    _refreshWeather();
+    _weatherTimer = Timer.periodic(
+      const Duration(minutes: 10),
+      (_) => _refreshWeather(),
+    );
   }
 
   @override
   void dispose() {
+    _weatherTimer?.cancel();
+    _weatherService.close();
     _gameFocus.dispose();
     super.dispose();
   }
@@ -133,6 +166,7 @@ class _FarmScreenState extends State<FarmScreen> {
   }
 
   void _showAnimal(AnimalComponent component) {
+    var food = FoodType.pellets;
     _showPanel((context, refresh) {
       final animal = state.animals[component.id]!;
       return Column(
@@ -148,20 +182,49 @@ class _FarmScreenState extends State<FarmScreen> {
           ),
           Text('${state.coins} coins'),
           const SizedBox(height: 16),
+          Text('Favorite food: ${animal.kind.favoriteFood.name}'),
+          DropdownButton<FoodType>(
+            value: food,
+            items: FoodType.values
+                .map(
+                  (type) => DropdownMenuItem(
+                    value: type,
+                    child: Text(
+                      '${_title(type.name)} (${state.inventory.count(type)} left)',
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) => refresh(() => food = value!),
+          ),
           FilledButton.icon(
-            onPressed: state.inventory.food <= 0
+            onPressed: state.inventory.count(food) <= 0
                 ? null
                 : () {
-                    _change(feedAnimal(state, animal.id), refresh);
+                    _change(feedAnimal(state, animal.id, food: food), refresh);
                     Navigator.pop(context);
                   },
             icon: const Icon(Icons.restaurant),
-            label: Text('Feed (${state.inventory.food} left)'),
+            label: Text('Feed (${state.inventory.count(food)} left)'),
           ),
           FilledButton.icon(
             onPressed: () => _change(petAnimal(state, animal.id), refresh),
             icon: const Icon(Icons.favorite),
             label: const Text('Pet (+10 coins)'),
+          ),
+          const Text('Enclosure toys'),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final toy in AnimalToy.values)
+                OutlinedButton(
+                  onPressed: () => _change(
+                    playWithAnimal(state, animal.id, toy: toy),
+                    refresh,
+                  ),
+                  child: Text('Play with ${toy.name}'),
+                ),
+            ],
           ),
         ],
       );
@@ -349,6 +412,20 @@ class _FarmScreenState extends State<FarmScreen> {
             '${state.animals.length + state.horses.length} animals on your farm',
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 16),
+          const Text(
+            'Food supplies',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          for (final food in FoodType.values)
+            OutlinedButton(
+              onPressed: state.coins < food.price
+                  ? null
+                  : () => _change(buyFood(state, food), refresh),
+              child: Text(
+                'Buy ${food.name} (${food.price} coins) • ${state.inventory.count(food)} left',
+              ),
+            ),
         ],
       );
     });
@@ -369,6 +446,23 @@ class _FarmScreenState extends State<FarmScreen> {
     ),
     body: Column(
       children: [
+        Material(
+          color: const Color(0xffffe7b8),
+          child: InkWell(
+            onTap: _refreshWeather,
+            child: SizedBox(
+              width: double.infinity,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Text(
+                  _weatherStatus,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+          ),
+        ),
         Expanded(
           child: Focus(
             focusNode: _gameFocus,

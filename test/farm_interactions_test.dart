@@ -78,7 +78,10 @@ void main() {
       await tester.pump();
       expect(game.horses.last.variant, HorseVariant.black);
       expect(game.horses.last.id, 'horse-2');
-      expect(find.textContaining('5 coins'), findsOneWidget);
+      expect(
+        find.text('5 coins • Pet your animals to earn more.'),
+        findsOneWidget,
+      );
       expect(
         tester
             .widget<FilledButton>(buttonWithLabel('Buy horse (50 coins)'))
@@ -187,13 +190,22 @@ void main() {
       }
       await tester.pump(const Duration(milliseconds: 50));
       expect(game.animals.first.phase, greaterThan(phase));
-      expect(game.animals.length, 30);
+      expect(
+        game.animals.length,
+        5 + AnimalKind.values.length * AnimalVariant.values.length,
+      );
       expect(game.horses.length, 6);
       tester.view.physicalSize = const Size(320, 640);
       await tester.pump();
       for (final animal in [...game.animals, ...game.horses]) {
         expect(animal.position.x, inInclusiveRange(0, game.size.x));
         expect(animal.position.y, inInclusiveRange(0, game.size.y));
+        expect(
+          game
+              .enclosure(animal.penIndex)
+              .contains(Offset(animal.position.x, animal.position.y)),
+          isTrue,
+        );
       }
       game.movePlayer(Vector2(-10000, 10000));
       expect(game.player!.position.x, greaterThanOrEqualTo(24));

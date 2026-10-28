@@ -1,13 +1,16 @@
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/painting.dart';
 
 import 'domain/animal.dart';
 import 'domain/horse.dart';
+import 'domain/weather.dart';
+
+part 'farm_scenery.dart';
 
 class FarmGame extends FlameGame {
   FarmGame({
@@ -27,10 +30,31 @@ class FarmGame extends FlameGame {
   final Set<LogicalKeyboardKey> _heldKeys = {};
   final Vector2 _touchDirection = Vector2.zero();
   String? _riddenHorseId;
+  WeatherSnapshot? weather;
+
+  // One pen per kind; horses use the sixth pen until mounted.
+  Rect enclosure(int index) => Rect.fromLTWH(
+    size.x * (.04 + (index % 2) * .49),
+    size.y * (.20 + (index ~/ 2) * .25),
+    size.x * .43,
+    size.y * .22,
+  );
+
+  Vector2 confinedPosition(Vector2 point, int pen, Vector2 body) {
+    final rect = enclosure(pen);
+    final mx = min(body.x / 2 + 4, rect.width / 2);
+    final my = min(body.y / 2 + 4, rect.height / 2);
+    return Vector2(
+      point.x.clamp(rect.left + mx, rect.right - mx).toDouble(),
+      point.y.clamp(rect.top + my, rect.bottom - my).toDouble(),
+    );
+  }
 
   @override
   Future<void> onLoad() async {
     add(FarmBackground());
+    add(EnclosureBackground()..priority = 1);
+    add(WeatherOverlay()..priority = 200);
     player = PlayerComponent()
       ..position = boundedPosition(Vector2(size.x * .5, size.y * .62), 24)
       ..priority = 100;
@@ -103,10 +127,20 @@ class FarmGame extends FlameGame {
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
     for (final animal in animals) {
-      animal.position.setFrom(boundedPosition(animal.position, 48));
+      animal.position.setFrom(
+        confinedPosition(
+          animal.position,
+          animal.animal.kind.index,
+          animal.size,
+        ),
+      );
     }
     for (final horse in horses) {
-      horse.position.setFrom(boundedPosition(horse.position, 52));
+      horse.position.setFrom(
+        horse.isRidden
+            ? boundedPosition(horse.position, 52)
+            : confinedPosition(horse.position, 5, horse.size),
+      );
     }
     if (player != null) {
       final mount = _riddenHorse;
@@ -172,6 +206,9 @@ class FarmGame extends FlameGame {
     final previous = _riddenHorse;
     if (previous != null) {
       previous.isRidden = false;
+      previous.position.setFrom(
+        confinedPosition(previous.position, 5, previous.size),
+      );
       player?.position.setFrom(
         boundedPosition(previous.position + Vector2(0, 52), 24),
       );
@@ -217,6 +254,14 @@ class FarmGame extends FlameGame {
           ? boundedPosition(Vector2(size.x * .5, size.y * .35), 48)
           : _spawnPosition(animals.length)
       ..priority = 20;
+    final pen = enclosure(animal.kind.index);
+    component.position.setFrom(
+      confinedPosition(
+        Vector2(pen.center.dx, pen.center.dy),
+        animal.kind.index,
+        component.size,
+      ),
+    );
     animals.add(component);
     add(component);
   }
@@ -226,6 +271,14 @@ class FarmGame extends FlameGame {
     final component = HorseComponent(horse: horse, onTap: onHorseTapped)
       ..position = _spawnPosition(horses.length, horse: true)
       ..priority = 30;
+    final pen = enclosure(5);
+    component.position.setFrom(
+      confinedPosition(
+        Vector2(pen.center.dx, pen.center.dy),
+        5,
+        component.size,
+      ),
+    );
     horses.add(component);
     add(component);
   }
@@ -360,6 +413,7 @@ abstract class WanderingComponent extends PositionComponent
   double _movingFor = 0;
   bool facingLeft = false;
   bool get isRidden => false;
+  int get penIndex;
   double get walkSpeed => 15;
   bool get isWalking => _movingFor > 0;
   double get stride => isWalking ? sin(phase * 8) * 4 : 0;
@@ -392,7 +446,7 @@ abstract class WanderingComponent extends PositionComponent
       if (_direction.length2 > 0) _direction.normalize();
     }
     final delta = _direction * walkSpeed * dt;
-    final next = game.boundedPosition(position + delta, size.x / 2 + 6);
+    final next = game.confinedPosition(position + delta, penIndex, size);
     if ((next.x - position.x - delta.x).abs() > .01) _direction.x *= -1;
     if ((next.y - position.y - delta.y).abs() > .01) _direction.y *= -1;
     final movement = next - position;
@@ -440,6 +494,8 @@ class AnimalComponent extends WanderingComponent with TapCallbacks {
   final Animal animal;
   final void Function(AnimalComponent animal) onTap;
   String get id => animal.id;
+  @override
+  int get penIndex => animal.kind.index;
 
   @override
   double get walkSpeed => animal.kind == AnimalKind.chicken ? 21 : 13;
@@ -450,6 +506,11 @@ class AnimalComponent extends WanderingComponent with TapCallbacks {
     AnimalVariant.black => const Color(0xff45424c),
     AnimalVariant.spotted => const Color(0xfff6ece0),
     AnimalVariant.grey => const Color(0xffa5acb4),
+    AnimalVariant.cream => const Color(0xffffdfa5),
+    AnimalVariant.golden => const Color(0xffdcad43),
+    AnimalVariant.chestnut => const Color(0xff984d38),
+    AnimalVariant.silver => const Color(0xffd5dce2),
+    AnimalVariant.piebald => const Color(0xfffafafa),
   };
 
   @override
@@ -544,7 +605,9 @@ class AnimalComponent extends WanderingComponent with TapCallbacks {
         );
       }
     }
-    if (animal.variant == AnimalVariant.spotted || isCow) {
+    if (animal.variant == AnimalVariant.spotted ||
+        animal.variant == AnimalVariant.piebald ||
+        isCow) {
       final spot = Paint()
         ..color = animal.variant == AnimalVariant.black
             ? const Color(0xffb6ac9c)
@@ -710,6 +773,8 @@ class HorseComponent extends WanderingComponent with TapCallbacks {
   Horse horse;
   final void Function(HorseComponent horse) onTap;
   String get id => horse.id;
+  @override
+  int get penIndex => 5;
   HorseVariant get variant => horse.variant;
   bool get hasSaddle => horse.hasSaddle;
   Set<String> get decorations => horse.decorations;
