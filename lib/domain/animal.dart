@@ -1,8 +1,31 @@
+import 'inventory.dart';
+
 enum AnimalKind { sheep, goat, cow, chicken, donkey }
 
-enum AnimalVariant { ivory, brown, black, spotted, grey }
+enum AnimalVariant {
+  ivory,
+  brown,
+  black,
+  spotted,
+  grey,
+  cream,
+  golden,
+  chestnut,
+  silver,
+  piebald,
+}
+
+enum AnimalToy { ball, rope, brush }
 
 extension AnimalKindDetails on AnimalKind {
+  FoodType get favoriteFood => switch (this) {
+    AnimalKind.sheep => FoodType.hay,
+    AnimalKind.goat => FoodType.greens,
+    AnimalKind.cow => FoodType.apples,
+    AnimalKind.chicken => FoodType.grain,
+    AnimalKind.donkey => FoodType.carrots,
+  };
+
   int get price => switch (this) {
     AnimalKind.sheep => 30,
     AnimalKind.goat => 35,

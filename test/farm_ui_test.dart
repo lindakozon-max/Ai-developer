@@ -1,5 +1,6 @@
 import 'package:flappy_bird/main.dart';
 import 'package:flame/game.dart';
+import 'package:flappy_bird/farm_game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,12 +24,10 @@ void main() {
     await tester.tap(find.byType(IconButton).at(2));
     await tester.pump();
 
-    final gameRect = tester.getRect(
-      find.byWidgetPredicate((widget) => widget is GameWidget),
-    );
-    await tester.tapAt(
-      Offset(gameRect.center.dx, gameRect.top + gameRect.height * .35),
-    );
+    final game = tester
+        .widget<GameWidget<FarmGame>>(find.byType(GameWidget<FarmGame>))
+        .game!;
+    game.onAnimalTapped(game.animals.first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.textContaining('Feed ('), findsOneWidget);
