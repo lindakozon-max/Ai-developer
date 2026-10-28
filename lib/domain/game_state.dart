@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import 'animal.dart';
+import 'farm_item.dart';
 import 'horse.dart';
 import 'inventory.dart';
 
@@ -9,12 +12,18 @@ class GameState {
     this.horses = const {},
     this.coins = 100,
     this.riddenHorseId,
+    this.unlockedHorseStyles = const {HorseStyle.natural},
+    this.breedCount = 0,
+    this.ownedPurchases = const {},
   });
   final Map<String, Animal> animals;
   final Inventory inventory;
   final Map<String, Horse> horses;
   final int coins;
   final String? riddenHorseId;
+  final Set<HorseStyle> unlockedHorseStyles;
+  final int breedCount;
+  final Set<FarmItem> ownedPurchases;
   GameState copyWith({
     Map<String, Animal>? animals,
     Inventory? inventory,
@@ -22,12 +31,18 @@ class GameState {
     int? coins,
     String? riddenHorseId,
     bool dismount = false,
+    Set<HorseStyle>? unlockedHorseStyles,
+    int? breedCount,
+    Set<FarmItem>? ownedPurchases,
   }) => GameState(
     animals: animals ?? this.animals,
     inventory: inventory ?? this.inventory,
     horses: horses ?? this.horses,
     coins: coins ?? this.coins,
     riddenHorseId: dismount ? null : riddenHorseId ?? this.riddenHorseId,
+    unlockedHorseStyles: unlockedHorseStyles ?? this.unlockedHorseStyles,
+    breedCount: breedCount ?? this.breedCount,
+    ownedPurchases: ownedPurchases ?? this.ownedPurchases,
   );
 }
 
@@ -36,13 +51,87 @@ GameState petHorse(GameState state, String horseId) {
   return state.copyWith(coins: state.coins + 10);
 }
 
-GameState buyHorse(GameState state, Horse horse, {int price = 50}) {
-  if (price < 0 || state.coins < price || state.horses.containsKey(horse.id)) {
+GameState buyHorse(GameState state, Horse horse, {int? price}) {
+  final cost = price ?? horse.marketPrice;
+  if (cost < 0 ||
+      state.coins < cost ||
+      state.horses.containsKey(horse.id) ||
+      !state.unlockedHorseStyles.contains(horse.style)) {
     return state;
   }
   return state.copyWith(
     horses: {...state.horses, horse.id: horse},
-    coins: state.coins - price,
+    coins: state.coins - cost,
+  );
+}
+
+GameState buyFarmItem(GameState state, FarmItem item) {
+  if (state.ownedPurchases.contains(item) || state.coins < item.price) {
+    return state;
+  }
+  return state.copyWith(
+    coins: state.coins - item.price,
+    ownedPurchases: {...state.ownedPurchases, item},
+  );
+}
+
+GameState equipHorseStyle(GameState state, String horseId, HorseStyle style) {
+  final horse = state.horses[horseId];
+  if (horse == null || !state.unlockedHorseStyles.contains(style)) return state;
+  return state.copyWith(
+    horses: {
+      ...state.horses,
+      horseId: horse.copyWith(style: style),
+    },
+  );
+}
+
+/// Successful breeding unlocks the next style. Genetics depend only on the seed
+/// and parent order, never on frame timing or temporary horse equipment.
+GameState breedHorses(
+  GameState state,
+  String firstId,
+  String secondId, {
+  required int seed,
+}) {
+  final first = state.horses[firstId];
+  final second = state.horses[secondId];
+  if (first == null ||
+      second == null ||
+      firstId == secondId ||
+      state.coins < 40 ||
+      state.riddenHorseId == firstId ||
+      state.riddenHorseId == secondId) {
+    return state;
+  }
+  final random = Random(seed);
+  HorseStyle? nextStyle;
+  for (final style in HorseStyle.values) {
+    if (!state.unlockedHorseStyles.contains(style)) {
+      nextStyle = style;
+      break;
+    }
+  }
+  final unlocked = {...state.unlockedHorseStyles, ?nextStyle};
+  final styles = HorseStyle.values.where(unlocked.contains).toList();
+  final style = nextStyle ?? styles[random.nextInt(styles.length)];
+  var suffix = state.horses.length + 1;
+  while (state.horses.containsKey('horse-$suffix')) {
+    suffix++;
+  }
+  final foal = Horse(
+    id: 'horse-$suffix',
+    name: '${style.name} foal $suffix',
+    variant: random.nextBool() ? first.variant : second.variant,
+    breed: random.nextBool() ? first.breed : second.breed,
+    style: style,
+    parentIds: List.unmodifiable([firstId, secondId]),
+  );
+  return state.copyWith(
+    coins: state.coins - 40,
+    horses: {...state.horses, foal.id: foal},
+    unlockedHorseStyles: unlocked,
+    breedCount: state.breedCount + 1,
   );
 }
 

@@ -5,12 +5,17 @@ import 'package:flutter/services.dart';
 import 'domain/animal.dart';
 import 'domain/game_state.dart';
 import 'domain/horse.dart';
+import 'domain/farm_item.dart';
 import 'domain/inventory.dart';
 import 'services/weather_service.dart';
 import 'farm_game.dart';
 
 void main() => runApp(const FarmApp());
-String _title(String value) => '${value[0].toUpperCase()}${value.substring(1)}';
+String _title(String value) =>
+    '${value[0].toUpperCase()}${value.substring(1)}'.replaceAllMapped(
+      RegExp(r'([a-z])([A-Z])'),
+      (match) => '${match[1]} ${match[2]!.toLowerCase()}',
+    );
 
 class FarmApp extends StatelessWidget {
   const FarmApp({super.key});
@@ -129,8 +134,10 @@ class _FarmScreenState extends State<FarmScreen> {
   void _change(GameState next, StateSetter refresh) {
     setState(() => state = next);
     for (final horse in state.horses.values) {
+      game.addHorse(horse);
       game.syncHorse(horse);
     }
+    game.ownedPurchases = state.ownedPurchases;
     game.setRiddenHorse(state.riddenHorseId);
     refresh(() {});
   }
@@ -232,6 +239,8 @@ class _FarmScreenState extends State<FarmScreen> {
   }
 
   void _showHorse(HorseComponent component) {
+    String? partnerId;
+    String? breedingMessage;
     _showPanel((context, refresh) {
       final horse = state.horses[component.id]!;
       final riding = state.riddenHorseId == horse.id;
@@ -243,6 +252,9 @@ class _FarmScreenState extends State<FarmScreen> {
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           Text('${_title(horse.variant.name)} horse • ${state.coins} coins'),
+          Text(
+            '${_title(horse.breed.name)} breed • ${_title(horse.style.name)} style',
+          ),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: () => _change(petHorse(state, horse.id), refresh),
@@ -316,6 +328,80 @@ class _FarmScreenState extends State<FarmScreen> {
                   : 'Buy flower (20)',
             ),
           ),
+          const SizedBox(height: 16),
+          Text(
+            'Horse styles • ${state.unlockedHorseStyles.length}/${HorseStyle.values.length} unlocked',
+          ),
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final style in HorseStyle.values)
+                ChoiceChip(
+                  label: Text(
+                    '${_title(style.name)}${state.unlockedHorseStyles.contains(style) ? '' : ' 🔒'}',
+                  ),
+                  selected: horse.style == style,
+                  onSelected: !state.unlockedHorseStyles.contains(style)
+                      ? null
+                      : (_) => _change(
+                          equipHorseStyle(state, horse.id, style),
+                          refresh,
+                        ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Breed horses',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const Text(
+            'Choose two different horses. Each foal unlocks the next style:\nSpotted → Golden → Midnight → Rainbow → Celestial.',
+          ),
+          if (state.horses.length < 2)
+            const Text('Buy a second horse at the farm market first.'),
+          DropdownButton<String>(
+            key: const ValueKey('breeding-partner'),
+            value: partnerId,
+            hint: const Text('Choose another horse'),
+            isExpanded: true,
+            items: state.horses.values
+                .where((h) => h.id != horse.id)
+                .map((h) => DropdownMenuItem(value: h.id, child: Text(h.name)))
+                .toList(),
+            onChanged: (id) => refresh(() => partnerId = id),
+          ),
+          FilledButton.icon(
+            onPressed:
+                partnerId == null ||
+                    state.coins < 40 ||
+                    riding ||
+                    state.riddenHorseId == partnerId
+                ? null
+                : () {
+                    final next = breedHorses(
+                      state,
+                      horse.id,
+                      partnerId!,
+                      seed: state.breedCount + 1,
+                    );
+                    if (identical(next, state)) return;
+                    final foal = next.horses.values.firstWhere(
+                      (h) => !state.horses.containsKey(h.id),
+                    );
+                    breedingMessage =
+                        '${foal.name} born! ${_title(foal.style.name)} style${next.unlockedHorseStyles.length > state.unlockedHorseStyles.length ? ' unlocked for all your horses' : ''}.';
+                    _change(next, refresh);
+                  },
+            icon: const Icon(Icons.favorite),
+            label: const Text('Breed a foal (40 coins)'),
+          ),
+          if (breedingMessage != null)
+            Text(breedingMessage!, textAlign: TextAlign.center),
+          if (horse.parentIds.isNotEmpty)
+            Text(
+              'Parents: ${horse.parentIds.map((id) => state.horses[id]?.name ?? id).join(' & ')}',
+            ),
         ],
       );
     });
@@ -324,11 +410,13 @@ class _FarmScreenState extends State<FarmScreen> {
   void _showMarket() {
     var kind = 'horse';
     var variantIndex = 0;
+    var breed = HorseBreed.farm;
     _showPanel((context, refresh) {
       final animalKind = kind == 'horse'
           ? null
           : AnimalKind.values.byName(kind);
-      final price = animalKind?.price ?? 50;
+      final price =
+          animalKind?.price ?? (breed == HorseBreed.friesian ? 120 : 50);
       final variants = kind == 'horse'
           ? HorseVariant.values.map((v) => v.name).toList()
           : AnimalVariant.values.map((v) => v.name).toList();
@@ -360,8 +448,34 @@ class _FarmScreenState extends State<FarmScreen> {
             }),
           ),
           const SizedBox(height: 12),
+          if (animalKind == null) ...[
+            DropdownButtonFormField<HorseBreed>(
+              initialValue: breed,
+              key: const ValueKey('horse-breed'),
+              decoration: const InputDecoration(labelText: 'Horse breed'),
+              items: HorseBreed.values
+                  .map(
+                    (b) =>
+                        DropdownMenuItem(value: b, child: Text(_title(b.name))),
+                  )
+                  .toList(),
+              onChanged: (value) => refresh(() {
+                breed = value!;
+                if (breed == HorseBreed.friesian) {
+                  variantIndex = HorseVariant.black.index;
+                }
+              }),
+            ),
+            if (breed == HorseBreed.friesian)
+              const Text(
+                'Friesian • black coat, flowing mane and feathered hooves',
+              ),
+            const SizedBox(height: 12),
+          ],
           DropdownButtonFormField<int>(
-            key: ValueKey('variant-$kind'),
+            key: ValueKey(
+              'variant-${kind == 'horse' && breed == HorseBreed.friesian ? 'friesian' : kind}',
+            ),
             initialValue: variantIndex,
             decoration: const InputDecoration(labelText: 'Coat variant'),
             items: List.generate(
@@ -371,7 +485,9 @@ class _FarmScreenState extends State<FarmScreen> {
                 child: Text(_title(variants[index])),
               ),
             ),
-            onChanged: (value) => refresh(() => variantIndex = value!),
+            onChanged: animalKind == null && breed == HorseBreed.friesian
+                ? null
+                : (value) => refresh(() => variantIndex = value!),
           ),
           const SizedBox(height: 20),
           FilledButton.icon(
@@ -384,6 +500,7 @@ class _FarmScreenState extends State<FarmScreen> {
                         name:
                             '${_title(variants[variantIndex])} horse ${state.horses.length + 1}',
                         variant: HorseVariant.values[variantIndex],
+                        breed: breed,
                       );
                       final next = buyHorse(state, horse);
                       if (identical(next, state)) return;
@@ -424,6 +541,25 @@ class _FarmScreenState extends State<FarmScreen> {
                   : () => _change(buyFood(state, food), refresh),
               child: Text(
                 'Buy ${food.name} (${food.price} coins) • ${state.inventory.count(food)} left',
+              ),
+            ),
+          const SizedBox(height: 16),
+          const Text(
+            'Creatures & farm treasures',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const Text(
+            'Pet your animals to earn coins. Purchases appear on your farm.',
+          ),
+          for (final item in FarmItem.values)
+            OutlinedButton(
+              onPressed:
+                  state.ownedPurchases.contains(item) ||
+                      state.coins < item.price
+                  ? null
+                  : () => _change(buyFarmItem(state, item), refresh),
+              child: Text(
+                '${_title(item.name)} • ${state.ownedPurchases.contains(item) ? 'Owned' : '${item.price} coins'}',
               ),
             ),
         ],
