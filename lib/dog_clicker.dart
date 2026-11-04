@@ -10,6 +10,7 @@ class DogBreed {
     required this.clickPower,
     required this.autoPower,
     required this.tagline,
+    required this.color,
   });
 
   final String name;
@@ -18,6 +19,7 @@ class DogBreed {
   final BigInt clickPower;
   final BigInt autoPower;
   final String tagline;
+  final Color color;
 }
 
 final dogBreeds = [
@@ -28,6 +30,7 @@ final dogBreeds = [
     clickPower: BigInt.from(1),
     autoPower: BigInt.from(0),
     tagline: 'Your first loyal coin collector',
+    color: Color(0xffffdced),
   ),
   DogBreed(
     name: 'Corgi',
@@ -36,6 +39,7 @@ final dogBreeds = [
     clickPower: BigInt.from(2),
     autoPower: BigInt.from(1),
     tagline: 'Short legs, huge hustle',
+    color: Color(0xffffe0b2),
   ),
   DogBreed(
     name: 'Husky',
@@ -44,6 +48,7 @@ final dogBreeds = [
     clickPower: BigInt.from(20),
     autoPower: BigInt.from(10),
     tagline: 'Howls coins into existence',
+    color: Color(0xffd7ecff),
   ),
   DogBreed(
     name: 'Golden Retriever',
@@ -52,14 +57,34 @@ final dogBreeds = [
     clickPower: BigInt.from(250),
     autoPower: BigInt.from(125),
     tagline: 'Always brings back a bonus',
+    color: Color(0xfffff0b3),
+  ),
+  DogBreed(
+    name: 'Poodle',
+    emoji: '🐩',
+    price: BigInt.from(10000000),
+    clickPower: BigInt.from(500),
+    autoPower: BigInt.from(250),
+    tagline: 'Fancy fur, fancy fortune',
+    color: Color(0xffeadcff),
+  ),
+  DogBreed(
+    name: 'Dalmatian',
+    emoji: '🐕',
+    price: BigInt.from(100000000),
+    clickPower: BigInt.from(1000),
+    autoPower: BigInt.from(500),
+    tagline: 'Spotted with lucky coins',
+    color: Color(0xffe4f4f0),
   ),
   DogBreed(
     name: 'Cosmic Shiba',
     emoji: '🚀',
-    price: BigInt.from(1000000000),
-    clickPower: BigInt.from(1000),
-    autoPower: BigInt.from(500),
+    price: BigInt.from(10000000000),
+    clickPower: BigInt.from(2500),
+    autoPower: BigInt.from(1250),
     tagline: 'The goodest dog in the galaxy',
+    color: Color(0xffd9d4ff),
   ),
   DogBreed(
     name: 'Infinity Wolf',
@@ -68,6 +93,7 @@ final dogBreeds = [
     clickPower: BigInt.from(10000),
     autoPower: BigInt.from(5000),
     tagline: 'Built for the endgame',
+    color: Color(0xffc8f1ec),
   ),
 ];
 
@@ -82,21 +108,28 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
   BigInt _coins = BigInt.zero;
   BigInt _clickUpgrade = BigInt.zero;
   BigInt _autoUpgrade = BigInt.zero;
+  BigInt _treatUpgrade = BigInt.zero;
+  BigInt _kennelUpgrade = BigInt.zero;
   var _selectedBreed = 0;
   final Set<int> _ownedBreeds = {0};
   Timer? _timer;
 
   DogBreed get _breed => dogBreeds[_selectedBreed];
-  BigInt get _clickPower => _scaledPower(_breed.clickPower, _clickUpgrade);
-  BigInt get _autoPower => _scaledPower(_breed.autoPower, _autoUpgrade);
-  BigInt get _clickUpgradeCost =>
-      BigInt.from(25) *
-      (_clickUpgrade + BigInt.one) *
-      (_clickUpgrade + BigInt.one);
-  BigInt get _autoUpgradeCost =>
-      BigInt.from(50) *
-      (_autoUpgrade + BigInt.one) *
-      (_autoUpgrade + BigInt.one);
+  BigInt get _clickPower => _scaledPower(
+    _scaledPower(_breed.clickPower, _clickUpgrade),
+    _treatUpgrade,
+  );
+  BigInt get _autoPower => _scaledPower(
+    _scaledPower(_breed.autoPower, _autoUpgrade),
+    _kennelUpgrade,
+  );
+  BigInt get _clickUpgradeCost => _risingCost(50, _clickUpgrade, 6);
+  BigInt get _autoUpgradeCost => _risingCost(100, _autoUpgrade, 7);
+  BigInt get _treatUpgradeCost => _risingCost(250, _treatUpgrade, 8);
+  BigInt get _kennelUpgradeCost => _risingCost(500, _kennelUpgrade, 9);
+
+  BigInt _risingCost(int base, BigInt level, int growth) =>
+      BigInt.from(base) * BigInt.from(growth).pow(level.toInt());
 
   BigInt _scaledPower(BigInt base, BigInt level) =>
       base * BigInt.from(2).pow(level.toInt());
@@ -128,16 +161,58 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
     });
   }
 
-  void _buyUpgrade({required bool click}) {
-    final cost = click ? _clickUpgradeCost : _autoUpgradeCost;
+  void _buyUpgrade({required String type}) {
+    final cost = switch (type) {
+      'click' => _clickUpgradeCost,
+      'auto' => _autoUpgradeCost,
+      'treat' => _treatUpgradeCost,
+      _ => _kennelUpgradeCost,
+    };
     if (_coins < cost) return;
     setState(() {
       _coins -= cost;
-      if (click) {
-        _clickUpgrade += BigInt.one;
-      } else {
-        _autoUpgrade += BigInt.one;
+      switch (type) {
+        case 'click':
+          _clickUpgrade += BigInt.one;
+        case 'auto':
+          _autoUpgrade += BigInt.one;
+        case 'treat':
+          _treatUpgrade += BigInt.one;
+        default:
+          _kennelUpgrade += BigInt.one;
       }
+    });
+  }
+
+  Future<void> _restart() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restart your coin journey?'),
+        content: const Text('All coins, breeds, and upgrades will be reset.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep playing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Restart'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _coins = BigInt.zero;
+      _clickUpgrade = BigInt.zero;
+      _autoUpgrade = BigInt.zero;
+      _treatUpgrade = BigInt.zero;
+      _kennelUpgrade = BigInt.zero;
+      _selectedBreed = 0;
+      _ownedBreeds
+        ..clear()
+        ..add(0);
     });
   }
 
@@ -153,6 +228,13 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
       title: const Text('Papillon Coin Club'),
       centerTitle: true,
       backgroundColor: const Color(0xffffd27d),
+      actions: [
+        IconButton(
+          onPressed: _restart,
+          tooltip: 'Restart game',
+          icon: const Icon(Icons.restart_alt),
+        ),
+      ],
     ),
     body: SafeArea(
       child: SingleChildScrollView(
@@ -171,28 +253,40 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
             GestureDetector(
               onTap: _clickDog,
               child: Card(
-                color: const Color(0xffffdced),
-                elevation: 5,
+                elevation: 6,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(28),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 28,
-                    horizontal: 36,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    gradient: LinearGradient(
+                      colors: [_breed.color, Colors.white],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      Text(_breed.emoji, style: const TextStyle(fontSize: 110)),
-                      Text(
-                        'Tap the ${_breed.name}!',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 28,
+                      horizontal: 36,
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          _breed.emoji,
+                          style: const TextStyle(fontSize: 110),
                         ),
-                      ),
-                      Text(_breed.tagline),
-                    ],
+                        Text(
+                          'Tap the ${_breed.name}!',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(_breed.tagline),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -204,14 +298,28 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
               'Double coins per click',
               _clickUpgradeCost,
               _clickUpgrade,
-              () => _buyUpgrade(click: true),
+              () => _buyUpgrade(type: 'click'),
             ),
             _upgradeButton(
               'Coin sniffer',
               'Double coins per second',
               _autoUpgradeCost,
               _autoUpgrade,
-              () => _buyUpgrade(click: false),
+              () => _buyUpgrade(type: 'auto'),
+            ),
+            _upgradeButton(
+              'Golden treats',
+              'Triple coins per click',
+              _treatUpgradeCost,
+              _treatUpgrade,
+              () => _buyUpgrade(type: 'treat'),
+            ),
+            _upgradeButton(
+              'Luxury kennel',
+              'Triple coins per second',
+              _kennelUpgradeCost,
+              _kennelUpgrade,
+              () => _buyUpgrade(type: 'kennel'),
             ),
             const SizedBox(height: 12),
             _sectionTitle('Dog breeds'),
