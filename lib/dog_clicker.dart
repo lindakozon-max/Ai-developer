@@ -20,7 +20,7 @@ class DogBreed {
   final String tagline;
 }
 
-const dogBreeds = [
+final dogBreeds = [
   DogBreed(
     name: 'Papillon',
     emoji: '🐶',
