@@ -57,16 +57,16 @@ const dogBreeds = [
     name: 'Cosmic Shiba',
     emoji: '🚀',
     price: BigInt.from(1000000000),
-    clickPower: BigInt.from(1000000),
-    autoPower: BigInt.from(500000),
+    clickPower: BigInt.from(1000),
+    autoPower: BigInt.from(500),
     tagline: 'The goodest dog in the galaxy',
   ),
   DogBreed(
     name: 'Infinity Wolf',
     emoji: '🐲',
     price: BigInt.from(1000000000000),
-    clickPower: BigInt.from(100000000000000000),
-    autoPower: BigInt.from(1000000000000),
+    clickPower: BigInt.from(10000),
+    autoPower: BigInt.from(5000),
     tagline: 'Built for the endgame',
   ),
 ];
@@ -87,8 +87,8 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
   Timer? _timer;
 
   DogBreed get _breed => dogBreeds[_selectedBreed];
-  BigInt get _clickPower => _breed.clickPower + _clickUpgrade;
-  BigInt get _autoPower => _breed.autoPower + _autoUpgrade;
+  BigInt get _clickPower => _scaledPower(_breed.clickPower, _clickUpgrade);
+  BigInt get _autoPower => _scaledPower(_breed.autoPower, _autoUpgrade);
   BigInt get _clickUpgradeCost =>
       BigInt.from(25) *
       (_clickUpgrade + BigInt.one) *
@@ -97,6 +97,9 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
       BigInt.from(50) *
       (_autoUpgrade + BigInt.one) *
       (_autoUpgrade + BigInt.one);
+
+  BigInt _scaledPower(BigInt base, BigInt level) =>
+      base * BigInt.from(2).pow(level.toInt());
 
   @override
   void initState() {
@@ -198,14 +201,14 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
             _sectionTitle('Upgrades'),
             _upgradeButton(
               'Stronger paws',
-              'Add 1 coin per click',
+              'Double coins per click',
               _clickUpgradeCost,
               _clickUpgrade,
               () => _buyUpgrade(click: true),
             ),
             _upgradeButton(
               'Coin sniffer',
-              'Add 1 coin per second',
+              'Double coins per second',
               _autoUpgradeCost,
               _autoUpgrade,
               () => _buyUpgrade(click: false),
