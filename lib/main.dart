@@ -10,6 +10,7 @@ import 'domain/farm_item.dart';
 import 'domain/inventory.dart';
 import 'services/weather_service.dart';
 import 'farm_game.dart';
+import 'dog_clicker.dart';
 
 part 'dragon_panels.dart';
 
@@ -30,7 +31,7 @@ class FarmApp extends StatelessWidget {
       colorSchemeSeed: const Color(0xffe8927e),
       useMaterial3: true,
     ),
-    home: const MenuScreen(),
+    home: const DogClickerScreen(),
   );
 }
 
