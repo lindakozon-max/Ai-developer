@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -112,7 +113,10 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
   BigInt _kennelUpgrade = BigInt.zero;
   var _selectedBreed = 0;
   final Set<int> _ownedBreeds = {0};
+  final Random _random = Random();
   Timer? _timer;
+  var _eventCountdown = 10;
+  var _eventMessage = 'A surprise can happen at any moment!';
 
   DogBreed get _breed => dogBreeds[_selectedBreed];
   BigInt get _clickPower => _scaledPower(
@@ -138,8 +142,15 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _autoPower == BigInt.zero) return;
-      setState(() => _coins += _autoPower);
+      if (!mounted) return;
+      setState(() {
+        _coins += _autoPower;
+        _eventCountdown--;
+        if (_eventCountdown <= 0) {
+          _coins += _randomEventReward();
+          _eventCountdown = 10 + _random.nextInt(11);
+        }
+      });
     });
   }
 
@@ -149,7 +160,30 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
     super.dispose();
   }
 
-  void _clickDog() => setState(() => _coins += _clickPower);
+  void _clickDog() {
+    final lucky = _random.nextInt(25) == 0;
+    setState(() {
+      _coins += lucky ? _clickPower * BigInt.from(5) : _clickPower;
+      if (lucky) _eventMessage = 'Lucky paw! That click paid 5× coins!';
+    });
+  }
+
+  BigInt _randomEventReward() {
+    final reward = switch (_random.nextInt(4)) {
+      0 => _clickPower * BigInt.from(8),
+      1 => _autoPower * BigInt.from(20) + _clickPower * BigInt.from(3),
+      2 => (_clickPower + _autoPower) * BigInt.from(5),
+      _ => _clickPower * BigInt.from(12) + BigInt.from(10),
+    };
+    final messages = [
+      'Picnic time! Your dog found ${_number(reward)} bonus coins.',
+      'A treasure box appeared! You got ${_number(reward)} coins.',
+      'A friendly dog joined the walk and brought ${_number(reward)} coins.',
+      'Zoomies bonus! Your dog earned ${_number(reward)} coins.',
+    ];
+    _eventMessage = messages[_random.nextInt(messages.length)];
+    return reward;
+  }
 
   void _buyBreed(int index) {
     final breed = dogBreeds[index];
@@ -210,6 +244,8 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
       _treatUpgrade = BigInt.zero;
       _kennelUpgrade = BigInt.zero;
       _selectedBreed = 0;
+      _eventCountdown = 10;
+      _eventMessage = 'A surprise can happen at any moment!';
       _ownedBreeds
         ..clear()
         ..add(0);
@@ -248,6 +284,19 @@ class _DogClickerScreenState extends State<DogClickerScreen> {
             Text(
               '${_number(_clickPower)} per click  •  ${_number(_autoPower)} per second',
               style: const TextStyle(color: Color(0xff76506a)),
+            ),
+            const SizedBox(height: 10),
+            Card(
+              color: const Color(0xfffff0b3),
+              child: ListTile(
+                leading: const Icon(
+                  Icons.auto_awesome,
+                  color: Color(0xffd48a00),
+                ),
+                title: const Text('Random surprise'),
+                subtitle: Text(_eventMessage),
+                trailing: Text('$_eventCountdown s'),
+              ),
             ),
             const SizedBox(height: 18),
             GestureDetector(
