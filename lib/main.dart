@@ -11,6 +11,7 @@ import 'domain/inventory.dart';
 import 'services/weather_service.dart';
 import 'farm_game.dart';
 import 'dog_clicker.dart';
+import 'english_tutor.dart';
 
 part 'dragon_panels.dart';
 
@@ -790,6 +791,19 @@ class _FarmScreenState extends State<FarmScreen> {
                         onPressed: _showMarket,
                         icon: const Icon(Icons.storefront),
                         label: const Text('Farm market'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => EnglishTutorScreen(
+                              onLessonCompleted: () => setState(
+                                () => state = state.copyWith(coins: state.coins + 10),
+                              ),
+                            ),
+                          ),
+                        ),
+                        icon: const Icon(Icons.school),
+                        label: const Text('English tutor'),
                       ),
                       if (state.riddenHorseId != null ||
                           state.riddenDragonId != null)
