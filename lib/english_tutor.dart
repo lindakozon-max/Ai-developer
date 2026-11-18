@@ -70,6 +70,51 @@ class _EnglishTutorScreenState extends State<EnglishTutorScreen> {
     );
   }
 
+  Future<void> _editFish(int index) async {
+    final nameController = TextEditingController(text: _fishNames[index]);
+    var color = _fishColors[index];
+    final result = await showDialog<(String, Color)>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, refresh) => AlertDialog(
+          title: Text('Customize ${_fishNames[index]}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                maxLength: 16,
+                decoration: const InputDecoration(labelText: 'Fish name'),
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final option in Colors.primaries.take(8))
+                    ChoiceChip(
+                      label: CircleAvatar(backgroundColor: option, radius: 10),
+                      selected: color == option,
+                      onSelected: (_) => refresh(() => color = option),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, (nameController.text.trim(), color)), child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    nameController.dispose();
+    if (result != null && mounted) {
+      setState(() {
+        _fishNames[index] = result.$1.isEmpty ? _fishNames[index] : result.$1;
+        _fishColors[index] = result.$2;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Finn’s English Aquarium')),
@@ -85,11 +130,16 @@ class _EnglishTutorScreenState extends State<EnglishTutorScreen> {
                   const SizedBox(height: 8),
                   Text('🐟 Fish: ${_fishNames.length}    🌿 Plants: $_plants    📚 Lessons: $_lessons'),
                   Wrap(spacing: 8, children: [
-                    for (var i = 0; i < _fishNames.length; i++) Chip(
-                      avatar: CircleAvatar(backgroundColor: _fishColors[i]),
-                      label: Text(_fishNames[i]),
-                    ),
+                    for (var i = 0; i < _fishNames.length; i++)
+                      GestureDetector(
+                        onTap: () => _editFish(i),
+                        child: Chip(
+                          avatar: CircleAvatar(backgroundColor: _fishColors[i]),
+                          label: Text(_fishNames[i]),
+                        ),
+                      ),
                   ]),
+                  const Text('Tap a fish to change its name or color.'),
                   const Text('Finish a lesson to grow the tank and earn 10 coins.'),
                 ]),
               ),
