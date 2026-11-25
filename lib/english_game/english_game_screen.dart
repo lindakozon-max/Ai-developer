@@ -1,6 +1,20 @@
 import 'package:flutter/material.dart';
 
-import 'services/groq_tutor_service.dart';
+import '../services/groq_tutor_service.dart';
+
+class EnglishGameScreen extends StatelessWidget {
+  const EnglishGameScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff2a9d8f)),
+        ),
+        child: const EnglishTutorScreen(onLessonCompleted: _ignoreReward),
+      );
+}
+
+void _ignoreReward() {}
 
 class EnglishTutorScreen extends StatefulWidget {
   const EnglishTutorScreen({super.key, required this.onLessonCompleted});

@@ -10,8 +10,7 @@ import 'domain/farm_item.dart';
 import 'domain/inventory.dart';
 import 'services/weather_service.dart';
 import 'farm_game.dart';
-import 'dog_clicker.dart';
-import 'english_tutor.dart';
+import 'english_game/english_game_screen.dart';
 
 part 'dragon_panels.dart';
 
@@ -27,12 +26,12 @@ class FarmApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    title: 'Sunny Paws Farm',
+    title: 'Finn’s English Aquarium',
     theme: ThemeData(
       colorSchemeSeed: const Color(0xffe8927e),
       useMaterial3: true,
     ),
-    home: const DogClickerScreen(),
+    home: const EnglishGameScreen(),
   );
 }
 
@@ -791,19 +790,6 @@ class _FarmScreenState extends State<FarmScreen> {
                         onPressed: _showMarket,
                         icon: const Icon(Icons.storefront),
                         label: const Text('Farm market'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => EnglishTutorScreen(
-                              onLessonCompleted: () => setState(
-                                () => state = state.copyWith(coins: state.coins + 10),
-                              ),
-                            ),
-                          ),
-                        ),
-                        icon: const Icon(Icons.school),
-                        label: const Text('English tutor'),
                       ),
                       if (state.riddenHorseId != null ||
                           state.riddenDragonId != null)
